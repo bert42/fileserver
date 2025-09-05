@@ -1,0 +1,5 @@
+Workspace Notes
+===============
+
+This is a read-write workspace directory.
+You can create, modify, and delete files here.

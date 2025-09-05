@@ -1,0 +1,69 @@
+# Rust/Cargo
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Test data (uncomment if you don't want to track test files)
+# test-data/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Backup files
+*.bak
+*.backup
+*.tmp
+
+# Generated protobuf files (these are regenerated during build)
+**/generated/
+**/*_pb.rs
+
+# Build artifacts
+build/
+dist/
+out/
+
+# Temporary files
+*.temp
+*.temporary
+
+# Coverage reports
+lcov.info
+*.gcda
+*.gcno
+coverage/
+
+# Profiling data
+*.prof
+perf.data*
+
+# Local configuration overrides (if any)
+config.local.toml
+*.local.toml

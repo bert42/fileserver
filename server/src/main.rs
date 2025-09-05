@@ -1,0 +1,51 @@
+mod auth;
+mod config;
+mod file_handler;
+mod service;
+
+use auth::AuthService;
+use config::ServerConfig;
+use service::FileServiceImpl;
+use common::file_service_server::FileServiceServer;
+use clap::Parser;
+use std::net::SocketAddr;
+use tonic::transport::Server;
+use tracing::info;
+
+#[derive(Parser)]
+#[command(name = "fileserver-server")]
+#[command(about = "A gRPC fileserver")]
+struct Args {
+    #[arg(short, long, default_value = "config.toml")]
+    config: String,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
+
+    let args = Args::parse();
+    
+    info!("Loading configuration from: {}", args.config);
+    let config = ServerConfig::load_from_file(&args.config)?;
+    
+    let addr: SocketAddr = format!("0.0.0.0:{}", config.server.port).parse()?;
+    info!("Starting fileserver on {}", addr);
+    
+    let auth_service = AuthService::new(config.clone());
+    let file_service = FileServiceImpl::new(auth_service);
+    
+    info!("Configured directories:");
+    for dir in &config.directories {
+        info!("  - {}: {} ({})", dir.name, dir.path, dir.permissions);
+    }
+    
+    info!("Allowed IPs: {:?}", config.server.allowed_ips);
+
+    Server::builder()
+        .add_service(FileServiceServer::new(file_service))
+        .serve(addr)
+        .await?;
+
+    Ok(())
+}

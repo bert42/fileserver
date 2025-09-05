@@ -1,0 +1,7 @@
+[server]
+host = "127.0.0.1"
+port = 50051
+
+[client]
+timeout_seconds = 30
+retry_attempts = 3

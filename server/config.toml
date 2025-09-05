@@ -1,0 +1,20 @@
+# Server Configuration
+[server]
+port = 50051
+allowed_ips = ["127.0.0.1", "192.168.1.0/24", "10.0.0.0/8"]
+
+# Directory Sections
+[[directories]]
+name = "documents"
+path = "./test-data/documents"
+permissions = "read-only"
+
+[[directories]]
+name = "workspace"
+path = "./test-data/workspace"
+permissions = "read-write"
+
+[[directories]]
+name = "shared"
+path = "./test-data/shared"
+permissions = "read-only"
