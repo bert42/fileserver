@@ -123,4 +123,254 @@ impl FileHandler {
 
         Ok(data.len() as u64)
     }
+
+    pub async fn delete_file(&self, full_path: &Path) -> Result<(), FileServerError> {
+        if !full_path.exists() {
+            return Err(FileServerError::FileNotFound(
+                full_path.to_string_lossy().to_string()
+            ));
+        }
+
+        if full_path.is_file() {
+            async_fs::remove_file(full_path).await?;
+        } else if full_path.is_dir() {
+            async_fs::remove_dir_all(full_path).await?;
+        } else {
+            return Err(FileServerError::InvalidPath(
+                "Path is neither a file nor a directory".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tokio::fs as async_fs;
+    use uuid::Uuid;
+
+    async fn create_test_environment() -> std::path::PathBuf {
+        let test_dir = std::env::temp_dir().join(format!("fileserver_handler_test_{}", Uuid::now_v7()));
+        if test_dir.exists() {
+            async_fs::remove_dir_all(&test_dir).await.ok();
+        }
+        async_fs::create_dir_all(&test_dir).await.unwrap();
+
+        // Create test files and directories
+        let test_file = test_dir.join("test_file.txt");
+        let test_subdir = test_dir.join("subdir");
+        let subdir_file = test_subdir.join("nested_file.txt");
+
+        async_fs::write(&test_file, "Hello, World!").await.unwrap();
+        async_fs::create_dir_all(&test_subdir).await.unwrap();
+        async_fs::write(&subdir_file, "Nested content").await.unwrap();
+
+        test_dir
+    }
+
+    async fn cleanup_test_environment(test_dir: &Path) {
+        fs::remove_dir_all(test_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_stat_file() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+        let test_file = test_dir.join("test_file.txt");
+
+        let result = handler.stat(&test_file).await;
+        assert!(result.is_ok());
+
+        let metadata = result.unwrap();
+        assert_eq!(metadata.name, "test_file.txt");
+        assert!(!metadata.is_directory);
+        assert_eq!(metadata.size, 13); // "Hello, World!" length
+        assert!(metadata.modified_time > 0);
+        assert!(metadata.created_time > 0);
+
+        cleanup_test_environment(&test_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_stat_directory() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+        let test_subdir = test_dir.join("subdir");
+
+        let result = handler.stat(&test_subdir).await;
+        assert!(result.is_ok());
+
+        let metadata = result.unwrap();
+        assert_eq!(metadata.name, "subdir");
+        assert!(metadata.is_directory);
+
+        cleanup_test_environment(&test_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_stat_nonexistent_file() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+        let nonexistent = test_dir.join("nonexistent.txt");
+
+        let result = handler.stat(&nonexistent).await;
+        assert!(result.is_err());
+
+        cleanup_test_environment(&test_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_list_directory() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+
+        let result = handler.list_directory(&test_dir).await;
+        assert!(result.is_ok());
+
+        let entries = result.unwrap();
+        assert_eq!(entries.len(), 2); // test_file.txt and subdir
+
+        // Check directory comes first (sorted)
+        assert!(entries[0].is_directory);
+        assert_eq!(entries[0].name, "subdir");
+
+        // Check file comes second
+        assert!(!entries[1].is_directory);
+        assert_eq!(entries[1].name, "test_file.txt");
+        assert_eq!(entries[1].size, 13);
+
+        cleanup_test_environment(&test_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_list_nonexistent_directory() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+        let nonexistent = test_dir.join("nonexistent");
+
+        let result = handler.list_directory(&nonexistent).await;
+        assert!(result.is_err());
+
+        cleanup_test_environment(&test_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_read_file() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+        let test_file = test_dir.join("test_file.txt");
+
+        let result = handler.read_file(&test_file, None, None).await;
+        assert!(result.is_ok());
+
+        let content = result.unwrap();
+        assert_eq!(content, b"Hello, World!");
+
+        cleanup_test_environment(&test_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_read_file_with_offset_and_length() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+        let test_file = test_dir.join("test_file.txt");
+
+        // Read "World" from "Hello, World!"
+        let result = handler.read_file(&test_file, Some(7), Some(5)).await;
+        assert!(result.is_ok());
+
+        let content = result.unwrap();
+        assert_eq!(content, b"World");
+
+        cleanup_test_environment(&test_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_write_file() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+        let new_file = test_dir.join("new_file.txt");
+
+        let data = b"New file content";
+        let result = handler.write_file(&new_file, data, None).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), data.len() as u64);
+
+        // Verify file was written
+        let written_content = fs::read(&new_file).unwrap();
+        assert_eq!(written_content, data);
+
+        cleanup_test_environment(&test_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_write_file_with_offset() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+        let test_file = test_dir.join("test_file.txt");
+
+        // Write "RUST" at offset 7 (replacing "World")
+        let data = b"RUST";
+        let result = handler.write_file(&test_file, data, Some(7)).await;
+        assert!(result.is_ok());
+
+        // Verify the content
+        let content = fs::read(&test_file).unwrap();
+        let content_str = String::from_utf8(content).unwrap();
+        assert!(content_str.contains("Hello, RUST"));
+
+        cleanup_test_environment(&test_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_delete_file() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+        let test_file = test_dir.join("test_file.txt");
+
+        // Ensure file exists before deletion
+        assert!(test_file.exists());
+
+        let result = handler.delete_file(&test_file).await;
+        assert!(result.is_ok());
+
+        // Verify file was deleted
+        assert!(!test_file.exists());
+
+        cleanup_test_environment(&test_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_delete_directory() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+        let test_subdir = test_dir.join("subdir");
+
+        // Ensure directory exists before deletion
+        assert!(test_subdir.exists());
+
+        let result = handler.delete_file(&test_subdir).await;
+        assert!(result.is_ok());
+
+        // Verify directory was deleted
+        assert!(!test_subdir.exists());
+
+        cleanup_test_environment(&test_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_delete_nonexistent_file() {
+        let test_dir = create_test_environment().await;
+        let handler = FileHandler::new();
+        let nonexistent = test_dir.join("nonexistent.txt");
+
+        let result = handler.delete_file(&nonexistent).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("File not found"));
+
+        cleanup_test_environment(&test_dir).await;
+    }
 }

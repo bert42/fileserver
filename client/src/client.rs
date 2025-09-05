@@ -110,4 +110,13 @@ impl FileServerClient {
     pub async fn write_text(&mut self, path: &str, text: &str) -> Result<WriteResponse, FileServerError> {
         self.write(path, text.as_bytes()).await
     }
+
+    pub async fn delete(&mut self, path: &str) -> Result<DeleteResponse, FileServerError> {
+        let request = Request::new(DeleteRequest {
+            path: path.to_string(),
+        });
+
+        let response = self.client.delete(request).await?;
+        Ok(response.into_inner())
+    }
 }

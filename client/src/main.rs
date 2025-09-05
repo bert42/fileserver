@@ -29,6 +29,7 @@ enum Commands {
     ReadText { path: String },
     Write { path: String, content: String },
     WriteFile { path: String, file: String },
+    Delete { path: String },
 }
 
 #[tokio::main]
@@ -38,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     
     let config = ClientConfig::load_from_file(&args.config)?;
-    let client_id = format!("client-{}", uuid::Uuid::new_v4());
+    let client_id = format!("client-{}", uuid::Uuid::now_v7());
     let client = FileServerClient::new(config, client_id).await?;
     let mut operations = FileOperations::new(client);
 
@@ -74,6 +75,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::WriteFile { path, file } => {
             operations.write_file(&path, &file).await?;
+            Ok(())
+        }
+        Commands::Delete { path } => {
+            operations.delete(&path).await?;
             Ok(())
         }
     };

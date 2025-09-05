@@ -205,4 +205,27 @@ impl file_service_server::FileService for FileServiceImpl {
 
         Ok(Response::new(response))
     }
+
+    async fn delete(&self, request: Request<DeleteRequest>) -> Result<Response<DeleteResponse>, Status> {
+        let req = request.into_inner();
+        let (directory_name, file_path) = self.parse_path(&req.path)?;
+        let full_path = self.resolve_full_path(&directory_name, &file_path, "write")?;
+
+        match self.file_handler.delete_file(&full_path).await {
+            Ok(()) => {
+                let response = DeleteResponse {
+                    success: true,
+                    message: "File deleted successfully".to_string(),
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                let response = DeleteResponse {
+                    success: false,
+                    message: e.to_string(),
+                };
+                Ok(Response::new(response))
+            }
+        }
+    }
 }

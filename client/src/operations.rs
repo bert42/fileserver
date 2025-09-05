@@ -132,4 +132,19 @@ impl FileOperations {
         
         self.write(path, &content).await
     }
+
+    pub async fn delete(&mut self, path: &str) -> Result<(), FileServerError> {
+        let response = self.client.delete(path).await?;
+        
+        if response.success {
+            println!("✓ Successfully deleted '{}'", path);
+            println!("  Message: {}", response.message);
+        } else {
+            return Err(FileServerError::IoError(
+                std::io::Error::new(std::io::ErrorKind::Other, response.message)
+            ));
+        }
+        
+        Ok(())
+    }
 }

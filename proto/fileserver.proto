@@ -9,6 +9,7 @@ service FileService {
     rpc List(ListRequest) returns (ListResponse);
     rpc Read(ReadRequest) returns (stream DataChunk);
     rpc Write(stream DataChunk) returns (WriteResponse);
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
 }
 
 message Empty {}
@@ -76,4 +77,13 @@ message WriteResponse {
     bool success = 1;
     string message = 2;
     uint64 bytes_written = 3;
+}
+
+message DeleteRequest {
+    string path = 1;
+}
+
+message DeleteResponse {
+    bool success = 1;
+    string message = 2;
 }

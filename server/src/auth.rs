@@ -70,3 +70,127 @@ impl AuthService {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{ServerConfig, ServerSettings, DirectoryConfig};
+    use std::fs;
+
+    fn create_test_config() -> ServerConfig {
+        // Create temporary directories for testing
+        let temp_dir = std::env::temp_dir().join("fileserver_auth_test");
+        let docs_dir = temp_dir.join("docs");
+        let workspace_dir = temp_dir.join("workspace");
+        
+        fs::create_dir_all(&docs_dir).unwrap();
+        fs::create_dir_all(&workspace_dir).unwrap();
+
+        ServerConfig {
+            server: ServerSettings {
+                port: 8080,
+                allowed_ips: vec!["127.0.0.1".to_string(), "192.168.1.0/24".to_string()],
+            },
+            directories: vec![
+                DirectoryConfig {
+                    name: "docs".to_string(),
+                    path: docs_dir.to_string_lossy().to_string(),
+                    permissions: "read-only".to_string(),
+                },
+                DirectoryConfig {
+                    name: "workspace".to_string(),
+                    path: workspace_dir.to_string_lossy().to_string(),
+                    permissions: "read-write".to_string(),
+                },
+            ],
+        }
+    }
+
+    fn cleanup_test_dirs() {
+        let temp_dir = std::env::temp_dir().join("fileserver_auth_test");
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn test_directory_access_read_operations() {
+        let config = create_test_config();
+        let auth = AuthService::new(config);
+
+        // Test read access to read-only directory
+        let result = auth.check_directory_access("docs", "read");
+        assert!(result.is_ok());
+
+        // Test read access to read-write directory
+        let result = auth.check_directory_access("workspace", "read");
+        assert!(result.is_ok());
+
+        cleanup_test_dirs();
+    }
+
+    #[test]
+    fn test_directory_access_write_operations() {
+        let config = create_test_config();
+        let auth = AuthService::new(config);
+
+        // Test write access to read-only directory (should fail)
+        let result = auth.check_directory_access("docs", "write");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Write operation not allowed"));
+
+        // Test write access to read-write directory (should succeed)
+        let result = auth.check_directory_access("workspace", "write");
+        assert!(result.is_ok());
+
+        cleanup_test_dirs();
+    }
+
+    #[test]
+    fn test_directory_access_nonexistent_directory() {
+        let config = create_test_config();
+        let auth = AuthService::new(config);
+
+        let result = auth.check_directory_access("nonexistent", "read");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Directory 'nonexistent' not found"));
+
+        cleanup_test_dirs();
+    }
+
+    #[test]
+    fn test_path_validation() {
+        let config = create_test_config();
+        let auth = AuthService::new(config);
+
+        // Valid paths
+        assert!(auth.validate_path("file.txt").is_ok());
+        assert!(auth.validate_path("subdir/file.txt").is_ok());
+        assert!(auth.validate_path("").is_ok());
+
+        // Invalid paths with directory traversal
+        assert!(auth.validate_path("../file.txt").is_err());
+        assert!(auth.validate_path("dir/../file.txt").is_err());
+        assert!(auth.validate_path("../../etc/passwd").is_err());
+
+        // Invalid absolute paths
+        assert!(auth.validate_path("/etc/passwd").is_err());
+        assert!(auth.validate_path("\\Windows\\System32").is_err());
+
+        cleanup_test_dirs();
+    }
+
+    #[test]
+    fn test_path_validation_error_messages() {
+        let config = create_test_config();
+        let auth = AuthService::new(config);
+
+        let result = auth.validate_path("../file.txt");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Path traversal not allowed"));
+
+        let result = auth.validate_path("/etc/passwd");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Absolute paths not allowed"));
+
+        cleanup_test_dirs();
+    }
+}

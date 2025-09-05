@@ -96,3 +96,135 @@ impl ServerConfig {
         self.directories.iter().find(|d| d.name == name)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::net::IpAddr;
+
+    #[test]
+    fn test_valid_config_parsing() {
+        let config_content = r#"
+[server]
+port = 8080
+allowed_ips = ["127.0.0.1", "192.168.1.0/24"]
+
+[[directories]]
+name = "test_dir"
+path = "/tmp"
+permissions = "read-only"
+        "#;
+
+        let config: ServerConfig = toml::from_str(config_content).unwrap();
+        
+        assert_eq!(config.server.port, 8080);
+        assert_eq!(config.server.allowed_ips, vec!["127.0.0.1", "192.168.1.0/24"]);
+        assert_eq!(config.directories.len(), 1);
+        assert_eq!(config.directories[0].name, "test_dir");
+        assert_eq!(config.directories[0].path, "/tmp");
+        assert_eq!(config.directories[0].permissions, "read-only");
+    }
+
+    #[test]
+    fn test_ip_validation() {
+        let config = ServerConfig {
+            server: ServerSettings {
+                port: 8080,
+                allowed_ips: vec!["127.0.0.1".to_string(), "192.168.1.0/24".to_string()],
+            },
+            directories: vec![],
+        };
+
+        // Test localhost
+        let localhost: IpAddr = "127.0.0.1".parse().unwrap();
+        assert!(config.is_ip_allowed(&localhost));
+
+        // Test IP in CIDR range
+        let ip_in_range: IpAddr = "192.168.1.100".parse().unwrap();
+        assert!(config.is_ip_allowed(&ip_in_range));
+
+        // Test IP not in range
+        let ip_not_allowed: IpAddr = "10.0.0.1".parse().unwrap();
+        assert!(!config.is_ip_allowed(&ip_not_allowed));
+    }
+
+    #[test]
+    fn test_directory_lookup() {
+        let config = ServerConfig {
+            server: ServerSettings {
+                port: 8080,
+                allowed_ips: vec!["127.0.0.1".to_string()],
+            },
+            directories: vec![
+                DirectoryConfig {
+                    name: "docs".to_string(),
+                    path: "/tmp/docs".to_string(),
+                    permissions: "read-only".to_string(),
+                },
+                DirectoryConfig {
+                    name: "workspace".to_string(),
+                    path: "/tmp/workspace".to_string(),
+                    permissions: "read-write".to_string(),
+                },
+            ],
+        };
+
+        assert!(config.get_directory("docs").is_some());
+        assert!(config.get_directory("workspace").is_some());
+        assert!(config.get_directory("nonexistent").is_none());
+        
+        let docs_dir = config.get_directory("docs").unwrap();
+        assert_eq!(docs_dir.permissions, "read-only");
+    }
+
+    #[test]
+    fn test_config_validation_invalid_port() {
+        let config = ServerConfig {
+            server: ServerSettings {
+                port: 0,
+                allowed_ips: vec!["127.0.0.1".to_string()],
+            },
+            directories: vec![],
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Port cannot be 0"));
+    }
+
+    #[test]
+    fn test_config_validation_invalid_permissions() {
+        // Create a temporary directory for testing
+        let temp_dir = std::env::temp_dir().join("fileserver_test");
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let config = ServerConfig {
+            server: ServerSettings {
+                port: 8080,
+                allowed_ips: vec!["127.0.0.1".to_string()],
+            },
+            directories: vec![DirectoryConfig {
+                name: "test".to_string(),
+                path: temp_dir.to_string_lossy().to_string(),
+                permissions: "invalid".to_string(),
+            }],
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid permissions"));
+
+        // Clean up
+        fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn test_is_valid_ip_or_cidr() {
+        assert!(ServerConfig::is_valid_ip_or_cidr("127.0.0.1"));
+        assert!(ServerConfig::is_valid_ip_or_cidr("192.168.1.0/24"));
+        assert!(ServerConfig::is_valid_ip_or_cidr("::1"));
+        assert!(!ServerConfig::is_valid_ip_or_cidr("invalid_ip"));
+        assert!(!ServerConfig::is_valid_ip_or_cidr("256.256.256.256"));
+    }
+}
