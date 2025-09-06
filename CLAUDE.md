@@ -27,6 +27,11 @@ The server uses a `config.toml` file with the following structure:
 port = 50051
 allowed_ips = ["127.0.0.1", "192.168.1.100", "10.0.0.0/24"]
 
+# Security: Drop privileges after binding to port (optional)
+# If running as root, the server will drop to this user/group after startup
+user = "fileserver"
+group = "fileserver"
+
 # Directory Sections
 [[directories]]
 name = "documents"
@@ -47,6 +52,8 @@ permissions = "read-only"
 ### Configuration Fields
 - `port`: The port on which the server listens for gRPC connections
 - `allowed_ips`: List of IP addresses or CIDR ranges allowed to connect
+- `user` (optional): User to drop privileges to when started as root
+- `group` (optional): Group to drop privileges to when started as root
 - `directories`: Array of directory configurations
   - `name`: Logical name for the directory (used by clients)
   - `path`: Actual filesystem path on the server
@@ -120,6 +127,16 @@ client.write("workspace/output.txt", data).await?;
 let mut stream = client.write_stream("workspace/large.dat").await?;
 ```
 
+#### 7. Delete
+Deletes files or directories (only for directories with "read-write" permissions).
+```rust
+// Delete a file
+client.delete("workspace/old_file.txt").await?;
+
+// Delete a directory (removes all contents recursively)
+client.delete("workspace/old_project/").await?;
+```
+
 ## Protocol Definition (proto/fileserver.proto)
 
 ```protobuf
@@ -128,12 +145,13 @@ syntax = "proto3";
 package fileserver;
 
 service FileService {
-    rpc Connect(ConnectRequest) returns (ConnectResponse);
+    rpc Authenticate(ConnectRequest) returns (ConnectResponse);
     rpc HealthCheck(Empty) returns (HealthStatus);
     rpc Stat(StatRequest) returns (FileMetadata);
     rpc List(ListRequest) returns (ListResponse);
     rpc Read(ReadRequest) returns (stream DataChunk);
     rpc Write(stream DataChunk) returns (WriteResponse);
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
 }
 
 message ConnectRequest {
@@ -158,17 +176,21 @@ fileserver/
 ├── Cargo.toml
 ├── README.md
 ├── CLAUDE.md
+├── DEPLOYMENT.md
+├── fileserver.service
 ├── proto/
 │   └── fileserver.proto
 ├── build.rs
 ├── server/
 │   ├── Cargo.toml
 │   ├── config.toml
+│   ├── config.prod.toml
 │   └── src/
 │       ├── main.rs
 │       ├── config.rs
 │       ├── service.rs
 │       ├── auth.rs
+│       ├── privilege.rs
 │       └── file_handler.rs
 ├── client/
 │   ├── Cargo.toml
@@ -178,6 +200,8 @@ fileserver/
 │       ├── config.rs
 │       ├── client.rs
 │       └── operations.rs
+├── tests/
+│   └── integration_test.rs
 └── common/
     ├── Cargo.toml
     └── src/
@@ -191,8 +215,10 @@ fileserver/
 1. **IP Whitelisting**: Only configured IP addresses can connect to the server
 2. **Permission System**: Directories have explicit read-only or read-write permissions
 3. **Path Validation**: All file paths are validated to prevent directory traversal attacks
-4. **TLS Support**: Consider adding TLS encryption for production deployments
-5. **Authentication**: Consider implementing token-based authentication for enhanced security
+4. **Privilege Dropping**: When started as root, server drops privileges to specified user/group
+5. **Systemd Security**: Production deployment includes comprehensive systemd security hardening
+6. **TLS Support**: Consider adding TLS encryption for production deployments
+7. **Authentication**: Consider implementing token-based authentication for enhanced security
 
 ## Development Guidelines
 
@@ -240,6 +266,9 @@ cargo run -- read documents/data.txt
 
 # Write to a file
 cargo run -- write workspace/output.txt "Hello, World!"
+
+# Delete a file
+cargo run -- delete workspace/old_file.txt
 ```
 
 ## Dependencies
@@ -256,9 +285,15 @@ toml = "0.8"
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+nix = { version = "0.28", features = ["user"] }  # For privilege dropping
+ipnet = "2.9"  # For CIDR IP validation
+tokio-stream = "0.1"  # For gRPC streaming
 
 [build-dependencies]
 tonic-build = "0.11"
+
+[dev-dependencies]
+uuid = { version = "1.0", features = ["v7"] }  # For test isolation
 ```
 
 ## Error Handling
@@ -289,8 +324,47 @@ pub enum FileServerError {
 3. **Async I/O**: All operations are async using Tokio
 4. **Buffer Management**: Configurable buffer sizes for file operations
 
+## Production Deployment
+
+### Systemd Service
+
+The project includes a production-ready systemd service unit (`fileserver.service`) with:
+
+- **Security hardening**: Filesystem isolation, memory protection, namespace restrictions
+- **Automatic restart**: Service restarts on failure with backoff
+- **Resource limits**: Configurable memory and file descriptor limits
+- **Proper logging**: Integration with systemd journal
+
+### Privilege Dropping
+
+For enhanced security, the server supports privilege dropping:
+
+1. Start as root to bind to privileged ports
+2. Validate user/group existence
+3. Drop privileges to specified non-root user/group
+4. Verify privilege drop succeeded before serving requests
+
+### Configuration Templates
+
+- **Development**: `server/config.toml` - Basic development setup
+- **Production**: `server/config.prod.toml` - Production-ready with security settings
+
+### Deployment Documentation
+
+See `DEPLOYMENT.md` for complete installation and deployment instructions including:
+
+- System user creation and permissions
+- Directory structure setup
+- Firewall configuration
+- Service management
+- Monitoring and troubleshooting
+
 ## Future Enhancements
 
+- [x] ~~Privilege dropping support for security~~ ✅ **Completed**
+- [x] ~~File delete operations~~ ✅ **Completed**
+- [x] ~~Comprehensive unit testing~~ ✅ **Completed**
+- [x] ~~Production deployment with systemd~~ ✅ **Completed**
 - [ ] Add compression support for data transfer
 - [ ] Implement file watching/notification system
 - [ ] Add support for symbolic links
