@@ -14,6 +14,8 @@ pub struct ServerConfig {
 pub struct ServerSettings {
     pub port: u16,
     pub allowed_ips: Vec<String>,
+    pub user: Option<String>,
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,6 +134,8 @@ permissions = "read-only"
             server: ServerSettings {
                 port: 8080,
                 allowed_ips: vec!["127.0.0.1".to_string(), "192.168.1.0/24".to_string()],
+                user: None,
+                group: None,
             },
             directories: vec![],
         };
@@ -155,6 +159,8 @@ permissions = "read-only"
             server: ServerSettings {
                 port: 8080,
                 allowed_ips: vec!["127.0.0.1".to_string()],
+                user: None,
+                group: None,
             },
             directories: vec![
                 DirectoryConfig {
@@ -184,6 +190,8 @@ permissions = "read-only"
             server: ServerSettings {
                 port: 0,
                 allowed_ips: vec!["127.0.0.1".to_string()],
+                user: None,
+                group: None,
             },
             directories: vec![],
         };
@@ -203,6 +211,8 @@ permissions = "read-only"
             server: ServerSettings {
                 port: 8080,
                 allowed_ips: vec!["127.0.0.1".to_string()],
+                user: None,
+                group: None,
             },
             directories: vec![DirectoryConfig {
                 name: "test".to_string(),

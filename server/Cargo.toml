@@ -16,6 +16,7 @@ tracing-subscriber = { workspace = true }
 clap = { workspace = true }
 ipnet = "2.9"
 tokio-stream = "0.1"
+nix = { version = "0.28", features = ["user"] }
 
 [dev-dependencies]
 uuid = { version = "1.0", features = ["v7"] }

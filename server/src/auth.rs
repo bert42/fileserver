@@ -78,8 +78,9 @@ mod tests {
     use std::fs;
 
     fn create_test_config() -> ServerConfig {
-        // Create temporary directories for testing
-        let temp_dir = std::env::temp_dir().join("fileserver_auth_test");
+        // Create temporary directories for testing with unique names
+        let uuid = uuid::Uuid::now_v7();
+        let temp_dir = std::env::temp_dir().join(format!("fileserver_auth_test_{}", uuid));
         let docs_dir = temp_dir.join("docs");
         let workspace_dir = temp_dir.join("workspace");
         
@@ -90,6 +91,8 @@ mod tests {
             server: ServerSettings {
                 port: 8080,
                 allowed_ips: vec!["127.0.0.1".to_string(), "192.168.1.0/24".to_string()],
+                user: None,
+                group: None,
             },
             directories: vec![
                 DirectoryConfig {
@@ -106,15 +109,20 @@ mod tests {
         }
     }
 
-    fn cleanup_test_dirs() {
-        let temp_dir = std::env::temp_dir().join("fileserver_auth_test");
-        fs::remove_dir_all(&temp_dir).ok();
+    fn cleanup_test_dirs(config: &ServerConfig) {
+        if let Some(dir_config) = config.directories.first() {
+            if let Some(parent) = std::path::Path::new(&dir_config.path).parent() {
+                if let Some(grandparent) = parent.parent() {
+                    fs::remove_dir_all(grandparent).ok();
+                }
+            }
+        }
     }
 
     #[test]
     fn test_directory_access_read_operations() {
         let config = create_test_config();
-        let auth = AuthService::new(config);
+        let auth = AuthService::new(config.clone());
 
         // Test read access to read-only directory
         let result = auth.check_directory_access("docs", "read");
@@ -124,13 +132,13 @@ mod tests {
         let result = auth.check_directory_access("workspace", "read");
         assert!(result.is_ok());
 
-        cleanup_test_dirs();
+        cleanup_test_dirs(&config);
     }
 
     #[test]
     fn test_directory_access_write_operations() {
         let config = create_test_config();
-        let auth = AuthService::new(config);
+        let auth = AuthService::new(config.clone());
 
         // Test write access to read-only directory (should fail)
         let result = auth.check_directory_access("docs", "write");
@@ -141,25 +149,25 @@ mod tests {
         let result = auth.check_directory_access("workspace", "write");
         assert!(result.is_ok());
 
-        cleanup_test_dirs();
+        cleanup_test_dirs(&config);
     }
 
     #[test]
     fn test_directory_access_nonexistent_directory() {
         let config = create_test_config();
-        let auth = AuthService::new(config);
+        let auth = AuthService::new(config.clone());
 
         let result = auth.check_directory_access("nonexistent", "read");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Directory 'nonexistent' not found"));
 
-        cleanup_test_dirs();
+        cleanup_test_dirs(&config);
     }
 
     #[test]
     fn test_path_validation() {
         let config = create_test_config();
-        let auth = AuthService::new(config);
+        let auth = AuthService::new(config.clone());
 
         // Valid paths
         assert!(auth.validate_path("file.txt").is_ok());
@@ -175,13 +183,13 @@ mod tests {
         assert!(auth.validate_path("/etc/passwd").is_err());
         assert!(auth.validate_path("\\Windows\\System32").is_err());
 
-        cleanup_test_dirs();
+        cleanup_test_dirs(&config);
     }
 
     #[test]
     fn test_path_validation_error_messages() {
         let config = create_test_config();
-        let auth = AuthService::new(config);
+        let auth = AuthService::new(config.clone());
 
         let result = auth.validate_path("../file.txt");
         assert!(result.is_err());
@@ -191,6 +199,6 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Absolute paths not allowed"));
 
-        cleanup_test_dirs();
+        cleanup_test_dirs(&config);
     }
 }

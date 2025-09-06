@@ -1,0 +1,33 @@
+# Production Configuration for Rust gRPC Fileserver
+# This file demonstrates privilege dropping with user/group settings
+
+[server]
+port = 50051
+allowed_ips = ["127.0.0.1", "10.0.0.0/8", "192.168.0.0/16", "172.16.0.0/12"]
+
+# Security: Drop privileges after binding to port
+# If running as root, the server will drop to this user/group after startup
+# If not running as root, these settings are ignored with a warning
+user = "fileserver"
+group = "fileserver"
+
+# Directory configurations with specific permissions
+[[directories]]
+name = "documents"
+path = "/srv/fileserver/documents"
+permissions = "read-only"
+
+[[directories]]
+name = "uploads"
+path = "/srv/fileserver/uploads"
+permissions = "read-write"
+
+[[directories]]
+name = "shared"
+path = "/srv/fileserver/shared"
+permissions = "read-only"
+
+[[directories]]
+name = "workspace"
+path = "/srv/fileserver/workspace"
+permissions = "read-write"
