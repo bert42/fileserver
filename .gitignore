@@ -67,3 +67,6 @@ perf.data*
 # Local configuration overrides (if any)
 config.local.toml
 *.local.toml
+
+# Taskfile.dev
+.task

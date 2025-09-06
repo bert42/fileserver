@@ -1,0 +1,104 @@
+version: '3'
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+vars:
+  # Project configuration
+  PROJECT_NAME:
+    sh: cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name'
+  PROJECT_VERSION:
+    sh: cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version'
+  BINARY_NAME: '{{.PROJECT_NAME}}'
+
+  # Build configuration
+  BUILD_PROFILE: '{{.BUILD_PROFILE | default "release"}}'
+  TARGET_DIR: './target'
+  BINARY_PATH: '{{.TARGET_DIR}}/{{.BUILD_PROFILE}}/{{.BINARY_NAME}}'
+
+  # Git configuration
+  GIT_REPO: '{{.GIT_REPO | default ""}}'
+  GIT_BRANCH: '{{.GIT_BRANCH | default "main"}}'
+  BUILD_DIR: '{{.BUILD_DIR | default "."}}'
+
+  # Installation paths
+  INSTALL_PREFIX: '{{.INSTALL_PREFIX | default "/usr/local"}}'
+  INSTALL_BIN_DIR: '{{.INSTALL_PREFIX}}/bin'
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # Git operations
+  update:
+    desc: Update the cloned repository
+    dir: '{{.BUILD_DIR}}'
+    cmds:
+      - git fetch --all --tags --prune
+      - git checkout {{.GIT_BRANCH}}
+      - git pull origin {{.GIT_BRANCH}}
+    preconditions:
+      - sh: '[ -d "{{.BUILD_DIR}}/.git" ]'
+        msg: "No git repository found in {{.BUILD_DIR}}."
+
+  # Build tasks
+  build:
+    desc: Build the project in release mode
+    cmds:
+      - cargo build --release
+    sources:
+      - Cargo.toml
+      - Cargo.lock
+      - src/**/*.rs
+    generates:
+      - '{{.BINARY_PATH}}'
+
+  build:dev:
+    desc: Build the project in debug mode
+    cmds:
+      - cargo build
+    env:
+      BUILD_PROFILE: debug
+
+  build:optimized:
+    desc: Build with maximum optimizations
+    env:
+      RUSTFLAGS: "-C target-cpu=native -C opt-level=3 -C lto=fat -C embed-bitcode=yes"
+    cmds:
+      - cargo build --release
+      - echo "Stripping debug symbols..."
+      - strip {{.BINARY_PATH}} || true
+
+  # Cleaning
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - cargo clean
+      - rm -rf {{.BUILD_DIR}}
+
+  clean:cache:
+    desc: Clean cargo cache
+    cmds:
+      - cargo clean
+      - rm -rf ~/.cargo/registry/cache
+      - rm -rf ~/.cargo/git/checkouts
+
+  # Installation
+  install:
+    desc: Install the binary to system
+    deps: [build]
+    cmds:
+      - echo "Installing {{.BINARY_NAME}} to {{.INSTALL_BIN_DIR}}"
+      - sudo mkdir -p {{.INSTALL_BIN_DIR}}
+      - sudo cp {{.BINARY_PATH}} {{.INSTALL_BIN_DIR}}/{{.BINARY_NAME}}
+      - sudo chmod 755 {{.INSTALL_BIN_DIR}}/{{.BINARY_NAME}}
+      - echo "Installation complete!"
+
+  uninstall:
+    desc: Uninstall the binary from system
+    cmds:
+      - sudo rm -f {{.INSTALL_BIN_DIR}}/{{.BINARY_NAME}}
+      - echo "Uninstalled {{.BINARY_NAME}}"
