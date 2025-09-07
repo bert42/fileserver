@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  fileserver:
+    build: .
+    container_name: fileserver
+    restart: unless-stopped
+    ports:
+      - "50051:50051"
+    volumes:
+      # Configuration (override default with your production config)
+      - ./docker/config.toml:/etc/fileserver.toml:ro
+      
+      # Data directories - adjust these paths as needed
+      - ./docker/data/documents:/srv/fileserver/documents:ro
+      - ./docker/data/uploads:/srv/fileserver/uploads:rw  
+      - ./docker/data/shared:/srv/fileserver/shared:ro
+      - ./docker/data/workspace:/srv/fileserver/workspace:rw
+      
+    environment:
+      # Logging configuration
+      - RUST_LOG=info
+      - RUST_BACKTRACE=1
+      
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # Only capabilities needed for privilege dropping
+      - SETUID
+      - SETGID
+      
+    # Run as non-root user
+    user: "1000:1000"
+    
+    # Optional: resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    
+    # Network isolation
+    networks:
+      - fileserver-net
+
+networks:
+  fileserver-net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16

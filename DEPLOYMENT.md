@@ -6,11 +6,154 @@ This guide covers deploying the Rust gRPC fileserver in a production environment
 
 ## Prerequisites
 
-- Linux system with systemd
+- Linux system with systemd (for native deployment)
+- Docker and Docker Compose (for container deployment)
 - Rust toolchain (for building from source)
-- Root access for initial setup
+- Root access for initial setup (native deployment)
 
-## Installation Steps
+## Docker Deployment (Recommended)
+
+### Docker Configuration
+
+Docker deployments often use numeric UID/GID values for security and compatibility. The fileserver supports both username/group names and numeric IDs.
+
+#### Example Dockerfile
+
+```dockerfile
+FROM rust:1.75 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release --workspace
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create fileserver user with specific UID/GID
+RUN groupadd -r fileserver -g 1000 && \
+    useradd -r -g fileserver -u 1000 fileserver
+
+COPY --from=builder /app/target/release/fileserver-server /usr/local/bin/
+COPY server/config.prod.toml /etc/fileserver.toml
+
+# Create data directories
+RUN mkdir -p /srv/fileserver/{documents,uploads,shared,workspace} && \
+    chown -R 1000:1000 /srv/fileserver
+
+EXPOSE 50051
+USER 1000:1000
+
+CMD ["/usr/local/bin/fileserver-server"]
+```
+
+#### Docker Compose Example
+
+```yaml
+version: '3.8'
+
+services:
+  fileserver:
+    build: .
+    container_name: fileserver
+    restart: unless-stopped
+    ports:
+      - "50051:50051"
+    volumes:
+      # Configuration
+      - ./config/fileserver.toml:/etc/fileserver.toml:ro
+      # Data directories
+      - ./data/documents:/srv/fileserver/documents:ro
+      - ./data/uploads:/srv/fileserver/uploads:rw
+      - ./data/shared:/srv/fileserver/shared:ro
+      - ./data/workspace:/srv/fileserver/workspace:rw
+    environment:
+      - RUST_LOG=info
+      - RUST_BACKTRACE=1
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+    user: "1000:1000"
+    networks:
+      - fileserver-net
+
+networks:
+  fileserver-net:
+    driver: bridge
+```
+
+#### Configuration for Docker
+
+When running in Docker, you can use numeric UIDs/GIDs in your configuration:
+
+```toml
+# config/fileserver.toml
+[server]
+port = 50051
+allowed_ips = ["127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+
+# Use numeric IDs for Docker compatibility
+user = "1000"    # Numeric UID
+group = "1000"   # Numeric GID
+
+[[directories]]
+name = "documents"
+path = "/srv/fileserver/documents"
+permissions = "read-only"
+
+[[directories]]
+name = "uploads"
+path = "/srv/fileserver/uploads"
+permissions = "read-write"
+
+[[directories]]
+name = "shared"
+path = "/srv/fileserver/shared"
+permissions = "read-only"
+
+[[directories]]
+name = "workspace"
+path = "/srv/fileserver/workspace"
+permissions = "read-write"
+```
+
+#### Running with Docker
+
+```bash
+# Build and run with Docker Compose
+docker-compose up -d
+
+# Or run directly with Docker
+docker build -t fileserver .
+docker run -d \
+  --name fileserver \
+  --restart unless-stopped \
+  -p 50051:50051 \
+  -v $(pwd)/config/fileserver.toml:/etc/fileserver.toml:ro \
+  -v $(pwd)/data:/srv/fileserver:rw \
+  --user 1000:1000 \
+  --cap-drop ALL \
+  --cap-add SETUID \
+  --cap-add SETGID \
+  --security-opt no-new-privileges:true \
+  fileserver
+```
+
+### Docker Security Features
+
+- **Non-root execution**: Runs as user 1000:1000
+- **Minimal capabilities**: Only SETUID/SETGID for privilege dropping
+- **No new privileges**: Prevents privilege escalation
+- **Read-only config**: Configuration mounted as read-only
+- **Network isolation**: Uses custom Docker network
+
+---
+
+## Native Installation Steps
 
 ### 1. Create System User and Group
 
@@ -34,7 +177,7 @@ Set up the required directory structure:
 
 ```bash
 # Create application directories
-sudo mkdir -p /opt/fileserver/{bin,config,logs}
+sudo mkdir -p /opt/fileserver/{bin,logs}
 
 # Create data directories (adjust paths as needed)
 sudo mkdir -p /srv/fileserver/{documents,uploads,shared,workspace}
@@ -67,12 +210,12 @@ sudo chmod 755 /opt/fileserver/bin/fileserver-server
 Copy and customize the production configuration:
 
 ```bash
-# Copy production config
-sudo cp server/config.prod.toml /opt/fileserver/config/config.toml
+# Copy production config to system config directory
+sudo cp server/config.prod.toml /etc/fileserver.toml
 
 # Set proper ownership and permissions
-sudo chown fileserver:fileserver /opt/fileserver/config/config.toml
-sudo chmod 640 /opt/fileserver/config/config.toml
+sudo chown root:fileserver /etc/fileserver.toml
+sudo chmod 640 /etc/fileserver.toml
 ```
 
 Edit the configuration file to match your environment:
@@ -208,7 +351,7 @@ fi
 
 ```bash
 # Backup configuration
-sudo cp /opt/fileserver/config/config.toml /opt/fileserver/config/config.toml.backup.$(date +%Y%m%d)
+sudo cp /etc/fileserver.toml /etc/fileserver.toml.backup.$(date +%Y%m%d)
 ```
 
 ### Data Backup
@@ -244,7 +387,7 @@ sudo tar -czf /backup/fileserver-data-$(date +%Y%m%d).tar.gz /srv/fileserver/
 sudo systemctl stop fileserver.service
 
 # Run manually for debugging
-sudo -u fileserver /opt/fileserver/bin/fileserver-server --config /opt/fileserver/config/config.toml
+sudo -u fileserver /opt/fileserver/bin/fileserver-server --config /etc/fileserver.toml
 
 # Check service environment
 sudo systemd-analyze verify /etc/systemd/system/fileserver.service
@@ -276,13 +419,13 @@ sudo systemctl start fileserver.service
 
 ```bash
 # Backup current config
-sudo cp /opt/fileserver/config/config.toml /opt/fileserver/config/config.toml.backup
+sudo cp /etc/fileserver.toml /etc/fileserver.toml.backup
 
 # Edit configuration
-sudo nano /opt/fileserver/config/config.toml
+sudo nano /etc/fileserver.toml
 
 # Test configuration (dry run)
-sudo -u fileserver /opt/fileserver/bin/fileserver-server --config /opt/fileserver/config/config.toml --help
+sudo -u fileserver /opt/fileserver/bin/fileserver-server --config /etc/fileserver.toml --help
 
 # Restart service to apply changes
 sudo systemctl restart fileserver.service

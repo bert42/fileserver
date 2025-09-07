@@ -1,0 +1,38 @@
+# Docker ignore file for fileserver
+
+# Build artifacts
+target/
+Cargo.lock
+
+# Documentation and dev files
+README.md
+CLAUDE.md
+*.md
+.git/
+.gitignore
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test files
+/tests/
+
+# Development configs (Docker has its own)
+server/config.toml
+client/config.toml
+
+# Docker files themselves (not needed in build context)
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -16,9 +16,10 @@ use tracing::info;
 
 #[derive(Parser)]
 #[command(name = "fileserver-server")]
-#[command(about = "A gRPC fileserver")]
+#[command(about = "A gRPC fileserver with secure remote file access")]
 struct Args {
-    #[arg(short, long, default_value = "config.toml")]
+    /// Path to configuration file
+    #[arg(short, long, default_value = "/etc/fileserver.toml")]
     config: String,
 }
 

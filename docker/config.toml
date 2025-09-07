@@ -1,0 +1,33 @@
+# Docker Configuration for Rust gRPC Fileserver
+# This config demonstrates numeric UID/GID support for Docker deployments
+
+[server]
+port = 50051
+# Allow connections from Docker networks and common private ranges
+allowed_ips = ["127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+
+# Use numeric IDs for Docker compatibility
+# These match the user created in the Dockerfile
+user = "1000"    # Numeric UID
+group = "1000"   # Numeric GID
+
+# Directory configurations for Docker deployment
+[[directories]]
+name = "documents"
+path = "/srv/fileserver/documents"
+permissions = "read-only"
+
+[[directories]]
+name = "uploads"
+path = "/srv/fileserver/uploads"
+permissions = "read-write"
+
+[[directories]]
+name = "shared"
+path = "/srv/fileserver/shared"
+permissions = "read-only"
+
+[[directories]]
+name = "workspace"
+path = "/srv/fileserver/workspace"
+permissions = "read-write"

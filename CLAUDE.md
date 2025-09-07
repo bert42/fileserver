@@ -52,8 +52,8 @@ permissions = "read-only"
 ### Configuration Fields
 - `port`: The port on which the server listens for gRPC connections
 - `allowed_ips`: List of IP addresses or CIDR ranges allowed to connect
-- `user` (optional): User to drop privileges to when started as root
-- `group` (optional): Group to drop privileges to when started as root
+- `user` (optional): User to drop privileges to when started as root (supports names like "fileserver" or numeric UIDs like "1000")
+- `group` (optional): Group to drop privileges to when started as root (supports names like "fileserver" or numeric GIDs like "1000")
 - `directories`: Array of directory configurations
   - `name`: Logical name for the directory (used by clients)
   - `path`: Actual filesystem path on the server
@@ -239,7 +239,14 @@ cargo test --workspace
 
 ```bash
 cd server
+# Development (local config)
 cargo run -- --config config.toml
+
+# Production (system config)
+cargo run -- --config /etc/fileserver.toml
+
+# Or use the default location
+cargo run
 ```
 
 ### Running the Client
@@ -346,15 +353,18 @@ For enhanced security, the server supports privilege dropping:
 
 ### Configuration Templates
 
-- **Development**: `server/config.toml` - Basic development setup
-- **Production**: `server/config.prod.toml` - Production-ready with security settings
+- **Development**: `server/config.toml` - Basic development setup  
+- **Production**: `server/config.prod.toml` - Production template (install to `/etc/fileserver.toml`)
+- **Default location**: `/etc/fileserver.toml` - System-wide configuration
+- **Docker**: Supports both usernames and numeric UIDs/GIDs (e.g., `user = "1000"`, `group = "1000"`)
 
 ### Deployment Documentation
 
 See `DEPLOYMENT.md` for complete installation and deployment instructions including:
 
+- Docker deployment with security hardening
 - System user creation and permissions
-- Directory structure setup
+- Directory structure setup  
 - Firewall configuration
 - Service management
 - Monitoring and troubleshooting
