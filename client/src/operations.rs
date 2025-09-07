@@ -51,8 +51,11 @@ impl FileOperations {
         let modified = std::time::UNIX_EPOCH + std::time::Duration::from_secs(metadata.modified_time as u64);
         let created = std::time::UNIX_EPOCH + std::time::Duration::from_secs(metadata.created_time as u64);
         
-        println!("  Modified: {:?}", modified);
-        println!("  Created: {:?}", created);
+        let modified_datetime = chrono::DateTime::<chrono::Utc>::from(modified);
+        let created_datetime = chrono::DateTime::<chrono::Utc>::from(created);
+        
+        println!("  Modified: {}", modified_datetime.format("%Y-%m-%d %H:%M:%S UTC"));
+        println!("  Created: {}", created_datetime.format("%Y-%m-%d %H:%M:%S UTC"));
         
         Ok(metadata)
     }
@@ -73,13 +76,14 @@ impl FileOperations {
             };
             
             let modified = std::time::UNIX_EPOCH + std::time::Duration::from_secs(entry.modified_time as u64);
-            let modified_str = format!("{:?}", modified);
+            let datetime = chrono::DateTime::<chrono::Utc>::from(modified);
+            let modified_str = datetime.format("%Y-%m-%d %H:%M").to_string();
             
             println!("{:<30} {:<10} {:<15} {}", 
                 entry.name, 
                 file_type, 
                 size,
-                modified_str.split_whitespace().take(2).collect::<Vec<_>>().join(" ")
+                modified_str
             );
         }
         
