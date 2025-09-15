@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/ap
 
 WORKDIR /app
 COPY . .
-RUN cargo build --release --workspace
+RUN cargo build --release --bin fileserver-server --bin fileserver-client
 
 FROM debian:bookworm-slim
 
@@ -18,8 +18,9 @@ RUN apt-get update && apt-get install -y \
 RUN groupadd -r fileserver -g 1000 && \
     useradd -r -g fileserver -u 1000 -m fileserver
 
-# Copy binary from builder
+# Copy binaries from builder
 COPY --from=builder /app/target/release/fileserver-server /usr/local/bin/
+COPY --from=builder /app/target/release/fileserver-client /usr/local/bin/
 
 # Copy production config template (can be overridden with volume mount)
 COPY server/config.prod.toml /etc/fileserver.toml

@@ -194,8 +194,28 @@ impl file_service_server::FileService for FileServiceImpl {
         let (directory_name, file_path) = self.parse_path(&current_path)?;
         let full_path = self.resolve_full_path(&directory_name, &file_path, "write")?;
 
+        tracing::info!(
+            "Starting file write: path='{}', directory='{}', size={} bytes", 
+            current_path, 
+            directory_name, 
+            buffer.len()
+        );
+
         total_bytes = self.file_handler.write_file(&full_path, &buffer, None).await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(|e| {
+                tracing::error!(
+                    "File write failed: path='{}', error='{}'", 
+                    current_path, 
+                    e.to_string()
+                );
+                Status::internal(e.to_string())
+            })?;
+
+        tracing::info!(
+            "File write completed: path='{}', bytes_written={}", 
+            current_path, 
+            total_bytes
+        );
 
         let response = WriteResponse {
             success: true,
@@ -211,8 +231,18 @@ impl file_service_server::FileService for FileServiceImpl {
         let (directory_name, file_path) = self.parse_path(&req.path)?;
         let full_path = self.resolve_full_path(&directory_name, &file_path, "write")?;
 
+        tracing::info!(
+            "Starting file deletion: path='{}', directory='{}'", 
+            req.path, 
+            directory_name
+        );
+
         match self.file_handler.delete_file(&full_path).await {
             Ok(()) => {
+                tracing::info!(
+                    "File deletion completed: path='{}'", 
+                    req.path
+                );
                 let response = DeleteResponse {
                     success: true,
                     message: "File deleted successfully".to_string(),
@@ -220,6 +250,11 @@ impl file_service_server::FileService for FileServiceImpl {
                 Ok(Response::new(response))
             }
             Err(e) => {
+                tracing::error!(
+                    "File deletion failed: path='{}', error='{}'", 
+                    req.path, 
+                    e.to_string()
+                );
                 let response = DeleteResponse {
                     success: false,
                     message: e.to_string(),

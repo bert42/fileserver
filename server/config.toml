@@ -10,11 +10,11 @@ path = "./test-data/documents"
 permissions = "read-only"
 
 [[directories]]
-name = "workspace"
-path = "./test-data/workspace"
+name = "shortcodes"
+path = "./test-data/shortcodes"
 permissions = "read-write"
 
 [[directories]]
-name = "shared"
-path = "./test-data/shared"
-permissions = "read-only"
+name = "includes"
+path = "./test-data/includes"
+permissions = "read-write"
